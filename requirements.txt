@@ -6,3 +6,6 @@ duckdb
 google-generativeai
 xlrd
 openpyxl
+ezodf
+lxml
+tabulate

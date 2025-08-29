@@ -1,141 +1,227 @@
-# app.py
+# app.py - Aplicação Principal do FlowDesk Ultra com Análise Inteligente
 import streamlit as st
-from core.data_loader import carregar_planilha
-from ui.dashboard import render_dashboard, render_ai_assistant
+import polars as pl
 
-# --- Configuração da Página e Estado da Sessão ---
+# Importa as novas funções dos módulos inteligentes
+from core.data_loader_v2 import carregar_e_analisar_planilha, gerar_relatorio_estrutura
+from core.smart_data_analyzer import DataStructure
+from ui.smart_dashboard import (
+    render_structure_report, render_smart_dashboard,
+    render_column_explorer, render_business_insights
+)
+from core.ai_functions import perguntar_ia
+
+# Configuração da página
 st.set_page_config(
-    page_title="FlowDesk Ultra Prototype",
-    page_icon="🔍",
+    page_title="FlowDesk Ultra - Análise Inteligente",
+    page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Inicializa o estado da sessão de forma robusta
-if 'df' not in st.session_state:
-    st.session_state.df = None
-if 'log' not in st.session_state:
-    st.session_state.log = []
-if 'file_name' not in st.session_state:
-    st.session_state.file_name = None
-
-# --- Header Principal ---
-st.title("🔍 FlowDesk Ultra - The Traceable Engine")
-st.markdown(
+def gerar_sugestoes_ia(estrutura: DataStructure) -> list:
     """
-    **O motor de análise de dados com rastreabilidade total.**  
-    Cada número exibido na tela pode ser auditado até sua origem exata na planilha.
-    
-    ---
+    Gera sugestões de perguntas baseadas na estrutura identificada.
     """
-)
+    sugestoes = []
+    patterns = estrutura.patterns if hasattr(estrutura, 'patterns') else {}
 
-st.subheader("📁 Carregar Dados")
-st.markdown(
+    if patterns.get('vendedor_columns'):
+        sugestoes.append("Quais são os top 5 vendedores por volume de vendas?")
+        sugestoes.append("Qual vendedor tem o melhor ticket médio?")
+
+    if patterns.get('cliente_columns') and patterns.get('valor_columns'):
+        sugestoes.append("Quais são os 10 clientes que mais compram?")
+
+    if patterns.get('produto_columns'):
+        sugestoes.append("Quais produtos são mais vendidos?")
+
+    if patterns.get('data_columns'):
+        sugestoes.append("Como está a tendência de vendas ao longo do tempo?")
+        sugestoes.append("Qual mês teve a melhor performance?")
+
+    sugestoes.extend([
+        "Faça um resumo executivo dos dados",
+        "Identifique anomalias ou padrões interessantes",
+    ])
+
+    return sugestoes[:6]
+
+def render_ai_assistant_smart(df: pl.DataFrame, estrutura: DataStructure, log: list):
     """
-    **Passo 1:** Abra seu relatório (.xls) no Excel/LibreOffice e use "Salvar Como" para exportá-lo como **Texto CSV (.csv)**.  
-    **Passo 2:** Faça o upload do arquivo `.csv` gerado abaixo.
+    Renderiza o assistente de IA com contexto inteligente da estrutura.
     """
-)
-uploaded_file = st.file_uploader(
-    "Selecione sua planilha ODS",
-    type=["ods"], # Garanta que está assim
-    help="Formatos suportados: LibreOffice Calc (.ods)"
-)
+    st.header("🤖 Assistente IA Inteligente")
+    st.markdown("*O assistente agora entende a estrutura dos seus dados automaticamente.*")
 
-debug_mode = st.checkbox("Ativar modo de depuração (para arquivos problemáticos)")
-if uploaded_file:
-    # Processa o arquivo apenas se for um novo arquivo
-    if uploaded_file.name != st.session_state.file_name:
-        with st.spinner("🚀 Processando sua planilha com motor Polars..."):
-            df, log = carregar_planilha(uploaded_file, debug_mode=debug_mode)
-            if df is not None:
-                st.session_state.df = df
-                st.session_state.log = log
-                st.session_state.file_name = uploaded_file.name
-                st.success(
-                    f"✅ **Planilha '{uploaded_file.name}' carregada com sucesso!**\n\n"
-                    f"📊 {df.height:,} linhas × {df.width} colunas processadas\n"
-                    f"🔑 Coluna 'id_linha_original' injetada para rastreabilidade total"
-                )
-            else:
-                st.error("❌ **Falha ao carregar a planilha.** Verifique o log de erros abaixo:")
-                st.json(log[-1] if log else {"erro": "Log vazio"})
-    else:
-        st.info(f"📁 Planilha '{uploaded_file.name}' já está carregada na sessão.")
+    with st.expander("🧠 Contexto Inteligente Disponível para a IA"):
+        st.write("**Padrões Identificados:**")
+        patterns = estrutura.patterns if hasattr(estrutura, 'patterns') else {}
+        for pattern, cols in patterns.items():
+            if cols:
+                # Trata o caso de ser uma lista de objetos Column ou apenas uma string/lista de strings
+                if isinstance(cols, list) and all(hasattr(c, 'name') for c in cols):
+                    col_names = [c.name for c in cols]
+                else:
+                    col_names = cols
+                st.write(f"- {pattern.replace('_columns', '').title()}: `{col_names}`")
 
-# --- Renderização Condicional do Conteúdo ---
-if st.session_state.df is not None:
-    st.divider()
-    
-    # Renderiza o dashboard a partir do módulo de UI
-    render_dashboard(st.session_state.df, st.session_state.log)
+        st.write("**Colunas com Alta Confiança:**")
+        colunas_confiaveis = [col for col in estrutura.columns if col.confidence_score > 0.7]
+        for col in colunas_confiaveis:
+            st.write(f"- `{col.name}` (Tipo: {col.data_type}) - Confiança: {col.confidence_score:.1%}")
 
-    render_ai_assistant(st.session_state.df, st.session_state.log)
+    st.markdown("---")
+    st.markdown("**💬 Faça perguntas específicas sobre seus dados:**")
 
-    st.divider()
-    
-    # Seção de Auditoria
-    st.subheader("🔍 Sistema de Auditoria")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Resumo da Sessão:**")
-        st.info(
-            f"📝 **{len(st.session_state.log)}** operações registradas\n\n"
-            f"📊 **{st.session_state.df.height:,}** linhas sendo rastreadas\n\n"
-            f"🔑 IDs de linha: 0 → {st.session_state.df.height - 1}"
-        )
-    
-    with col2:
-        st.markdown("**Última Operação:**")
-        if st.session_state.log:
-            ultimo_log = st.session_state.log[-1]
-            st.json({
-                "passo": ultimo_log.get("passo", "N/A"),
-                "linhas_afetadas": len(ultimo_log.get("linhas_originais_afetadas", [])),
-                "resultado": ultimo_log.get("resultado", "N/A")
-            })
-        else:
-            st.write("Nenhuma operação registrada ainda.")
-    
-    # Log completo expansível
-    with st.expander("📋 Ver Log de Auditoria Completo da Sessão"):
-        st.markdown("**Todas as operações realizadas desde o carregamento:**")
-        for i, entrada in enumerate(st.session_state.log):
-            st.write(f"**{i+1}. {entrada.get('passo', 'Operação desconhecida')}**")
-            st.json(entrada)
-            if i < len(st.session_state.log) - 1:
-                st.divider()
+    sugestoes = gerar_sugestoes_ia(estrutura)
+    if sugestoes:
+        st.write("**💡 Sugestões:**")
+        cols = st.columns(len(sugestoes))
+        for i, sugestao in enumerate(sugestoes):
+            if cols[i].button(sugestao, key=f"sugestao_{i}"):
+                st.session_state.pergunta_ia = sugestao
+                st.rerun()
 
-else:
-    # Estado inicial - sem dados carregados
-    st.info(
-        """
-        👆 **Para começar, carregue uma planilha ODS acima.**
-        
-        ### 🎯 O que o FlowDesk Ultra faz:
-        
-        - **🔍 Rastreabilidade Total**: Cada métrica mostra exatamente quais linhas da planilha original foram usadas
-        - **⚡ Performance Extrema**: Motor Polars otimizado para datasets grandes (70k+ linhas)
-        - **🧮 Cálculos Auditáveis**: Log detalhado de cada operação matemática realizada
-        - **🎛️ Interface Intuitiva**: Dashboards interativos com validadores integrados
-        
-        ### 📋 Formato esperado da planilha:
-        - Arquivo `.ods` (LibreOffice Calc)
-        - Colunas com dados numéricos para análise
-        - Preferencialmente com colunas como 'Valor Venda', 'Vendas', ou similares
-        """
+    pergunta_usuario = st.text_area(
+        "Ou digite sua própria pergunta:",
+        value=st.session_state.get('pergunta_ia', ''),
+        key="input_pergunta_ia",
+        height=100
     )
 
-# --- Footer ---
-st.markdown("---")
-st.markdown(
+    if st.button("🧠 Perguntar ao FlowDesk AI", type="primary"):
+        if not pergunta_usuario:
+            st.warning("Por favor, digite uma pergunta ou selecione uma sugestão.")
+        else:
+            with st.spinner("🧠 IA analisando com contexto estrutural..."):
+                # Futuramente, a função perguntar_ia pode ser otimizada para receber o objeto 'estrutura'
+                resposta = perguntar_ia(df, log, pergunta_usuario, estrutura)
+                st.session_state.ultima_resposta_ia = resposta
+
+    if "ultima_resposta_ia" in st.session_state and st.session_state.ultima_resposta_ia:
+        st.markdown("#### 🎯 Resposta da IA:")
+        st.markdown(st.session_state.ultima_resposta_ia)
+        with st.expander("🔬 Ver Contexto Enviado para IA"):
+            if log:
+                st.json(log[-1])
+
+def render_welcome_screen():
     """
-    <div style='text-align: center; color: #666; font-size: 0.8em;'>
-        FlowDesk Ultra Prototype | Powered by Polars + Streamlit + Rastreabilidade Total
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+    Renderiza a tela de boas-vindas aprimorada.
+    """
+    st.markdown("""
+    ## 🧠 Bem-vindo ao FlowDesk Ultra Inteligente!
+
+    Esta versão utiliza um motor de análise para entender automaticamente a estrutura da sua planilha.
+
+    ### 🚀 **Como funciona:**
+    1.  **Upload na Barra Lateral**: Carregue seu arquivo ODS.
+    2.  **Análise Inteligente**: Clique no botão para o sistema identificar:
+        -   Onde estão seus cabeçalhos e dados reais.
+        -   Quais colunas representam vendedores, clientes, produtos, valores e datas.
+        -   A qualidade e o tipo de dado em cada coluna.
+    3.  **Explore os Resultados**: Navegue pelas abas para ver o dashboard adaptativo, a estrutura dos dados, insights e interagir com a IA que agora *entende* seus dados.
+    """)
+    st.info("""
+    💡 **Exemplo do que o sistema identifica automaticamente:**
+    -   👤 **Vendedor**: "Vendedor", "Rep", "Seller"
+    -   🏢 **Cliente**: "Cliente", "Razão Social", "Company"
+    -   💰 **Valor**: "Valor Total", "Preço", "Amount"
+    -   📦 **Produto**: "Produto", "Item", "Descrição"
+    -   📅 **Data**: "Data", "DateTime", "Dt_Pedido"
+    """)
+
+def main():
+    """Função principal da aplicação Streamlit."""
+    st.title("🧠 FlowDesk Ultra - Análise Inteligente de Dados")
+    st.markdown("""
+        **Uma nova abordagem que analisa e estrutura seus dados automaticamente.**
+        Faça o upload de um arquivo ODS na barra lateral para começar.
+    """)
+
+    # Inicialização do session state
+    if 'df' not in st.session_state:
+        st.session_state.df = None
+        st.session_state.estrutura = None
+        st.session_state.log_auditoria = []
+        st.session_state.processing_logs = ""
+
+    # --- BARRA LATERAL ---
+    with st.sidebar:
+        st.header("📁 Upload e Análise")
+        uploaded_file = st.file_uploader(
+            "Escolha um arquivo ODS",
+            type=['ods'],
+            help="O sistema identificará automaticamente a estrutura e os padrões de negócio."
+        )
+
+        if uploaded_file:
+            if st.button("🧠 Analisar Inteligentemente", type="primary", use_container_width=True):
+                with st.spinner("🔍 Mapeando estrutura e padrões... Isso pode levar um minuto."):
+                    progress_bar = st.progress(0, text="Iniciando análise...")
+
+                    def progress_callback(percentage, message):
+                        progress_bar.progress(percentage / 100, text=message)
+
+                    df_res, est_res, logs_res = carregar_e_analisar_planilha(
+                        uploaded_file, progress_callback=progress_callback
+                    )
+
+                    st.session_state.df = df_res
+                    st.session_state.estrutura = est_res
+                    st.session_state.processing_logs = logs_res
+                    st.session_state.log_auditoria = [] # Reseta o log de auditoria
+                    
+                    if df_res is not None and est_res is not None:
+                         st.success(f"✅ Análise concluída! {df_res.height:,} linhas estruturadas.")
+                    else:
+                         st.error("❌ Falha na análise. Verifique os logs.")
+                    
+                    st.rerun()
+
+        if st.session_state.df is not None and st.session_state.estrutura is not None:
+            st.markdown("---")
+            st.subheader("📊 Dados Carregados")
+            df = st.session_state.df
+            estrutura = st.session_state.estrutura
+            st.metric("Linhas de Dados", f"{df.height:,}")
+            st.metric("Colunas Válidas", f"{len(estrutura.columns)}")
+
+        if st.session_state.processing_logs:
+            with st.expander("📋 Logs de Análise da Estrutura"):
+                st.text(st.session_state.processing_logs)
+
+    # --- CONTEÚDO PRINCIPAL ---
+    if st.session_state.df is not None and st.session_state.estrutura is not None:
+        df = st.session_state.df
+        estrutura = st.session_state.estrutura
+        log = st.session_state.log_auditoria
+        relatorio = gerar_relatorio_estrutura(estrutura)
+
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📊 Dashboard Inteligente",
+            "📋 Estrutura Detectada",
+            "🔍 Explorador de Colunas",
+            "💡 Business Insights",
+            "🤖 Assistente IA"
+        ])
+
+        with tab1:
+            render_smart_dashboard(df, estrutura, log)
+        with tab2:
+            render_structure_report(estrutura, relatorio)
+            st.subheader("👀 Prévia dos Dados Estruturados")
+            st.dataframe(df.head(20), use_container_width=True)
+        with tab3:
+            render_column_explorer(df, estrutura)
+        with tab4:
+            render_business_insights(df, estrutura, log)
+        with tab5:
+            render_ai_assistant_smart(df, estrutura, log)
+
+    else:
+        render_welcome_screen()
+
+if __name__ == "__main__":
+    main()
