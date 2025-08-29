@@ -35,9 +35,9 @@ st.subheader("📁 Carregar Dados")
 st.markdown("Faça o upload de uma planilha `.ods` para iniciar a análise rastreável.")
 
 uploaded_file = st.file_uploader(
-    "Selecione sua planilha ODS",
-    type=["ods"],
-    help="Formatos suportados: LibreOffice Calc (.ods)"
+    "Selecione sua planilha (ODS, XLS, XLSX)",
+    type=["ods", "xls", "xlsx"],
+    help="Formatos suportados: LibreOffice (.ods) e Excel (.xls, .xlsx)"
 )
 
 if uploaded_file:
