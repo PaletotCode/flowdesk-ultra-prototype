@@ -30,14 +30,18 @@ st.markdown(
     """
 )
 
-# --- Seção de Upload ---
 st.subheader("📁 Carregar Dados")
-st.markdown("Faça o upload de uma planilha `.ods` para iniciar a análise rastreável.")
+st.markdown(
+    """
+    **Passo 1:** Abra seu relatório (.xls) no Excel/LibreOffice e use "Salvar Como" para exportá-lo como **Texto CSV (.csv)**.  
+    **Passo 2:** Faça o upload do arquivo `.csv` gerado abaixo.
+    """
+)
 
 uploaded_file = st.file_uploader(
-    "Selecione sua planilha (ODS, XLS, XLSX)",
-    type=["ods", "xls", "xlsx"],
-    help="Formatos suportados: LibreOffice (.ods) e Excel (.xls, .xlsx)"
+    "Selecione seu arquivo .CSV",
+    type=["csv"],
+    help="Use o formato .csv para máxima compatibilidade."
 )
 
 if uploaded_file:
