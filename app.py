@@ -37,11 +37,10 @@ st.markdown(
     **Passo 2:** Faça o upload do arquivo `.csv` gerado abaixo.
     """
 )
-
 uploaded_file = st.file_uploader(
-    "Selecione seu arquivo .CSV",
-    type=["csv"],
-    help="Use o formato .csv para máxima compatibilidade."
+    "Selecione sua planilha ODS",
+    type=["ods"], # Garanta que está assim
+    help="Formatos suportados: LibreOffice Calc (.ods)"
 )
 
 debug_mode = st.checkbox("Ativar modo de depuração (para arquivos problemáticos)")

@@ -1,97 +1,102 @@
-# core/data_loader.py (com Modo de Depuração)
+import pandas as pd
 import polars as pl
 from typing import Tuple, List, Dict, Any
 import streamlit as st
 
-@st.cache_data(show_spinner=False) # Desativamos o spinner do cache para não sobrepor o nosso
-def carregar_planilha(uploaded_file, debug_mode: bool = False) -> Tuple[pl.DataFrame, List[Dict[str, Any]]]:
+@st.cache_data(show_spinner=False)
+def carregar_planilha(uploaded_file) -> Tuple[pl.DataFrame, List[Dict[str, Any]]]:
     """
-    Carrega e faz o PARSE de um arquivo CSV. Inclui um modo de depuração
-    para diagnosticar arquivos com formatos inesperados.
+    Faz o parse de um relatório ODS estruturado em blocos, extraindo
+    pedidos, itens e o tipo de cada transação (PED, ACU, DEV).
     """
     log_auditoria = []
     
     try:
-        # --- ETAPA 1: LER O ARQUIVO CSV DE FORMA BRUTA ---
-        df_bruto = None
-        try:
-            # Tentativa com ponto e vírgula
-            df_bruto = pl.read_csv(uploaded_file, has_header=False, encoding='latin-1', separator=';')
-        except:
-            try:
-                # Tentativa com vírgula
-                uploaded_file.seek(0)
-                df_bruto = pl.read_csv(uploaded_file, has_header=False, encoding='latin-1', separator=',')
-            except Exception as e:
-                raise ValueError(f"Não foi possível ler o CSV nem com ';' nem com ','. Erro: {e}")
+        # --- ETAPA 1: LEITURA DO ARQUIVO ODS ---
+        # Usamos o engine 'odf' para garantir a leitura de arquivos .ods
+        df_bruto = pd.read_excel(uploaded_file, engine='odf', header=None)
         
-        # --- ETAPA 2: MODO DE DEPURAÇÃO ---
-        # Se o modo de depuração estiver ativo, mostramos os dados brutos e paramos.
-        if debug_mode:
-            st.warning(" MODO DE DEPURAÇÃO ATIVADO ")
-            st.markdown("A execução foi pausada para análise. As informações abaixo mostram como o programa está 'enxergando' seu arquivo.")
+        log_auditoria.append({
+            "passo": "Carga de Dados Brutos",
+            "detalhe": f"Carregadas {len(df_bruto)} linhas brutas do arquivo ODS '{uploaded_file.name}'."
+        })
+
+        # --- ETAPA 2: PARSING COM MÁQUINA DE ESTADOS ROBUSTA ---
+        dados_processados = []
+        estado_atual = "procurando_secao"
+        tipo_pedido_atual = "INDEFINIDO"
+        dados_pedido_atual = {}
+        cabecalho_itens = []
+
+        for index, row in df_bruto.iterrows():
+            # Converte a linha para uma lista de strings, tratando valores nulos
+            primeira_celula = str(row.iloc[0] if pd.notna(row.iloc[0]) else "").strip()
+
+            # --- Lógica de Transição de Estado ---
+            if "PEDIDOS EM CARTEIRA" in primeira_celula:
+                tipo_pedido_atual = "PED"
+                continue
+            elif "PEDIDOS ACUMULATIVO" in primeira_celula:
+                tipo_pedido_atual = "ACU"
+                continue
+            elif "DEVOLUÇÃO DE PEDIDOS" in primeira_celula:
+                tipo_pedido_atual = "DEV"
+                continue
+
+            if "Pedido" in primeira_celula:
+                estado_atual = "lendo_cabecalho_pedido"
+                dados_pedido_atual = {
+                    'Pedido': row.iloc[1],
+                    'Data': row.iloc[2],
+                    'Cód. Cliente': row.iloc[3],
+                    'Nome Cliente': row.iloc[4],
+                    'Cód. Vendedor': row.iloc[5],
+                    'Nome Vendedor': row.iloc[6],
+                    'Tipo_Pedido': tipo_pedido_atual
+                }
+                continue
             
-            st.subheader("1. Estrutura do DataFrame Bruto")
-            st.write(f"**Shape (Linhas, Colunas):** `{df_bruto.shape}`")
-            st.markdown(f"**Observação:** Se o número de colunas for 1, o separador (`;` ou `,`) provavelmente está incorreto para este arquivo.")
+            if "Cód. Int." in primeira_celula:
+                estado_atual = "lendo_itens"
+                # Captura os nomes das colunas dos itens dinamicamente
+                cabecalho_itens = [str(h).strip() for h in row]
+                continue
 
-            st.subheader("2. Prévia das 10 Primeiras Linhas Brutas")
-            st.dataframe(df_bruto.head(10))
+            if "Total do Pedido:" in primeira_celula:
+                estado_atual = "procurando_secao"
+                dados_pedido_atual = {}
+                cabecalho_itens = []
+                continue
 
-            log_auditoria.append({"passo": "Modo de Depuração", "detalhe": "Execução pausada para análise do arquivo."})
-            return None, log_auditoria # Para a execução aqui
+            # --- Lógica de Processamento de Estado ---
+            if estado_atual == "lendo_itens":
+                # Verifica se a linha parece ser uma linha de item válida (não vazia)
+                if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
+                    item_dict = {}
+                    for i, header in enumerate(cabecalho_itens):
+                        item_dict[header] = row.iloc[i]
+                    
+                    # Combina os dados do cabeçalho do pedido com os dados do item
+                    linha_completa = {**dados_pedido_atual, **item_dict}
+                    dados_processados.append(linha_completa)
 
-        # --- SE O MODO DE DEPURAÇÃO ESTIVER DESATIVADO, CONTINUA O PROCESSO NORMAL ---
+        log_auditoria.append({
+            "passo": "Parsing de Blocos",
+            "detalhe": f"Processadas {len(dados_processados)} linhas de itens de pedidos com sucesso."
+        })
 
-        # (O resto do código é o mesmo da última versão)
+        # --- ETAPA 3: CONSTRUÇÃO DO DATAFRAME FINAL ---
+        if not dados_processados:
+            raise ValueError("Nenhum item de pedido foi encontrado na planilha. Verifique o formato.")
+
+        df_pandas_limpo = pd.DataFrame(dados_processados)
+        df_final_polars = pl.from_pandas(df_pandas_limpo)
         
-        header_keywords = ['data', 'nota', 'cliente', 'vendedor', 'produto', 'valor', 'quant', 'total']
-        best_match_score = 0
-        header_row_index = -1
+        # Injeção da coluna de rastreabilidade
+        df_final = df_final_polars.with_row_count(name="id_linha_original")
 
-        for i, row in enumerate(df_bruto.head(20).iter_rows()):
-            current_score = 0
-            row_str = " ".join(str(cell) for cell in row).lower()
-            for keyword in header_keywords:
-                if keyword in row_str:
-                    current_score += 1
-            if current_score > best_match_score:
-                best_match_score = current_score
-                header_row_index = i
-
-        if best_match_score < 3:
-            raise ValueError("Não foi possível identificar uma linha de cabeçalho válida. Verifique se o arquivo CSV contém colunas como 'Data', 'Cliente', 'Valor', etc.")
-
-        header_names = [str(col).strip() for col in df_bruto.row(header_row_index)]
-        uploaded_file.seek(0)
-        
-        df_polars = pl.read_csv(uploaded_file, skip_rows=header_row_index + 1, has_header=False, encoding='latin-1', separator=';')
-        try:
-             df_polars = pl.read_csv(uploaded_file, skip_rows=header_row_index + 1, has_header=False, encoding='latin-1', separator=';')
-        except:
-            uploaded_file.seek(0)
-            df_polars = pl.read_csv(uploaded_file, skip_rows=header_row_index + 1, has_header=False, encoding='latin-1', separator=',')
-        
-        if len(df_polars.columns) == len(header_names):
-            df_polars.columns = header_names
-        else:
-            df_polars = df_polars.select(pl.all().prefix("col_"))
-
-        linhas_antes_limpeza = df_polars.height
-        log_auditoria.append({"passo": "Carga de Dados CSV", "detalhe": f"Carregadas {linhas_antes_limpeza} linhas. Cabeçalho na linha {header_row_index + 1}."})
-
-        df_limpo = df_polars.filter(
-            ~pl.col(df_polars.columns[2]).str.contains("Total", literal=True) &
-            pl.col(df_polars.columns[0]).is_not_null()
-        )
-
-        linhas_depois_limpeza = df_limpo.height
-        linhas_removidas = linhas_antes_limpeza - linhas_depois_limpeza
-        log_auditoria.append({"passo": "Limpeza Pós-Carga", "detalhe": f"Removidas {linhas_removidas} linhas de totais ou vazias."})
-
-        df_final = df_limpo.with_row_count(name="id_linha_original")
         return df_final, log_auditoria
 
     except Exception as e:
-        log_auditoria.append({"passo": "Falha Crítica na Carga ou Limpeza", "detalhe": str(e)})
+        log_auditoria.append({"passo": "Falha Crítica na Carga ou Parsing", "detalhe": str(e)})
         return None, log_auditoria
