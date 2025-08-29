@@ -44,11 +44,12 @@ uploaded_file = st.file_uploader(
     help="Use o formato .csv para máxima compatibilidade."
 )
 
+debug_mode = st.checkbox("Ativar modo de depuração (para arquivos problemáticos)")
 if uploaded_file:
     # Processa o arquivo apenas se for um novo arquivo
     if uploaded_file.name != st.session_state.file_name:
         with st.spinner("🚀 Processando sua planilha com motor Polars..."):
-            df, log = carregar_planilha(uploaded_file)
+            df, log = carregar_planilha(uploaded_file, debug_mode=debug_mode)
             if df is not None:
                 st.session_state.df = df
                 st.session_state.log = log
