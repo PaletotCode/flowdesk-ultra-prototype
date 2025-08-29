@@ -22,8 +22,8 @@ def carregar_planilha(uploaded_file) -> Tuple[pl.DataFrame, List[Dict[str, Any]]
     try:
         # --- ETAPA 1: CARGA DE DADOS BRUTOS (COM SUPORTE A MÚLTIPLOS MOTORES) ---
         # Removido 'engine="odf"' para que o pandas detecte o formato automaticamente
-        df_pandas = pd.read_excel(uploaded_file, engine=None) [cite: 1]
-        df_polars = pl.from_pandas(df_pandas) [cite: 1]
+        df_pandas = pd.read_excel(uploaded_file, engine=None)
+        df_polars = pl.from_pandas(df_pandas)
         linhas_antes_limpeza = df_polars.height
 
         log_auditoria.append({
@@ -81,7 +81,7 @@ def carregar_planilha(uploaded_file) -> Tuple[pl.DataFrame, List[Dict[str, Any]]
 
         # --- ETAPA 3: INJEÇÃO DE RASTREABILIDADE ---
         # Adiciona a coluna 'id_linha_original' ao DataFrame JÁ LIMPO.
-        df_final = df_limpo.with_row_count(name="id_linha_original") [cite: 1]
+        df_final = df_limpo.with_row_count(name="id_linha_original")
         
         return df_final, log_auditoria
 
