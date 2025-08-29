@@ -4,3 +4,5 @@ pandas
 odfpy
 duckdb
 google-generativeai
+xlrd
+openpyxl
