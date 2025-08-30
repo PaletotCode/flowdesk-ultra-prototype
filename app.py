@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-# CORREÇÃO: Importa do novo arquivo 'sheet_parser.py'
-from sheet_parser import load_sheet, parse
+# Renomeado para evitar conflito com bibliotecas padrão
+from sheet_parser import load_sheet, parse 
 
 st.set_page_config(page_title="Parser de Pedidos", layout="wide")
 
@@ -40,7 +40,7 @@ if uploaded:
 
         if debug:
             with st.sidebar.expander("📝 Logs de Parsing", expanded=True):
-                st.code("\n".join(logs))
+                st.code("\n".join(logs), language='log')
 
         prog.progress(100, text="Finalizado.")
 
