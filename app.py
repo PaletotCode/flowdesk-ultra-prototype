@@ -87,8 +87,8 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
                 pedido_id = f"UNKNOWN_{order_data_row_index}"
                 logs.append(f"[WARN] Pedido com ID ausente na linha {order_data_row_index}. Usando '{pedido_id}'.")
 
-            logs.append(f"--- Novo Bloco Encontrado ---")
-            logs.append(f"Pedido '{pedido_id}' capturado a partir da linha {order_data_row_index}.")
+            if debug: logs.append(f"--- Novo Bloco Encontrado ---")
+            if debug: logs.append(f"Pedido '{pedido_id}' capturado a partir da linha {order_data_row_index}.")
             
             pedidos_rows.append({
                 "pedido_id": pedido_id,
@@ -101,31 +101,31 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
             i = order_data_row_index + 1
             
             if i < n and _is_blank_row(df.iloc[i]):
-                logs.append(f"  -> Linha vazia (flag de itens) encontrada em {i}.")
+                if debug: logs.append(f"  -> Linha vazia (flag de itens) encontrada em {i}.")
                 i += 1
             else:
-                logs.append(f"  -> [WARN] Nenhuma linha vazia encontrada após os dados do pedido em {i-1}.")
+                if debug: logs.append(f"  -> [WARN] Nenhuma linha vazia encontrada após os dados do pedido em {i-1}.")
 
             if i < n and not _is_blank_row(df.iloc[i]):
                 item_header_raw = df.iloc[i, 1:13]
                 item_cols_norm = [_norm_col(h) for h in item_header_raw]
-                logs.append(f"  -> Potencial cabeçalho de itens encontrado em {i}. Colunas: {item_cols_norm}")
+                if debug: logs.append(f"  -> Potencial cabeçalho de itens encontrado em {i}. Colunas: {item_cols_norm}")
 
                 if 'codigo' in item_cols_norm:
                     i += 1
-                    logs.append(f"  -> Inciando busca por itens para o pedido '{pedido_id}' a partir da linha {i}...")
+                    if debug: logs.append(f"  -> Inciando busca por itens para o pedido '{pedido_id}' a partir da linha {i}...")
                     blanks = 0
                     while i < n:
                         item_row = df.iloc[i]
                         
                         if "Tipo" in item_row.values and "Id" in item_row.values:
-                            logs.append(f"  -> FIM DOS ITENS: Novo cabeçalho principal encontrado em {i}.")
+                            if debug: logs.append(f"  -> FIM DOS ITENS: Novo cabeçalho principal encontrado em {i}.")
                             break
                         
                         if _is_blank_row(item_row):
                             blanks += 1
                             if blanks >= 2:
-                                logs.append(f"  -> FIM DOS ITENS: Duas linhas vazias consecutivas encontradas em {i}.")
+                                if debug: logs.append(f"  -> FIM DOS ITENS: Duas linhas vazias consecutivas encontradas em {i}.")
                                 i += 1
                                 break
                             i += 1
@@ -136,7 +136,7 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
                         
                         nome = str(item_data_raw.get('nome', '')).strip()
                         if nome.lower().startswith('totais de'):
-                            logs.append(f"    - Linha de total ignorada em {i}.")
+                            if debug: logs.append(f"    - Linha de total ignorada em {i}.")
                             i += 1
                             continue
 
@@ -145,7 +145,7 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
                             i += 1
                             continue
 
-                        logs.append(f"    - Item encontrado em {i}: Código='{codigo}', Nome='{nome}'")
+                        if debug: logs.append(f"    - Item encontrado em {i}: Código='{codigo}'")
 
                         q = _to_float(item_data_raw.get('quantidade', 0)) or 0.0
                         p = _to_float(item_data_raw.get('preco venda', 0)) or 0.0
@@ -163,7 +163,7 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
                                 "subtotal_item": subtotal, "linha_origem": i,
                             }
                         else:
-                            logs.append(f"      -> Agregando item repetido: Código='{codigo}'")
+                            if debug: logs.append(f"      -> Agregando item repetido: Código='{codigo}'")
                             itens_rows[key]['quantidade'] += q
                             itens_rows[key]['desconto'] += d
                             itens_rows[key]['subtotal_item'] += subtotal
@@ -212,7 +212,7 @@ st.title("📄 Parser de Pedidos para DataFrame Estruturado")
 st.markdown("Faça o upload de sua planilha de vendas (`.ods`, `.xls`, `.xlsx`) para extrair os pedidos e itens de forma organizada.")
 
 uploaded = st.file_uploader("Selecione o arquivo", type=["ods","xls","xlsx"])
-debug = st.sidebar.checkbox("Exibir logs de debug", value=True)
+debug = st.sidebar.checkbox("Exibir logs de debug", value=False) # Valor padrão agora é False
 
 if uploaded:
     prog = st.progress(0, text="Aguardando processamento…")
@@ -231,19 +231,36 @@ if uploaded:
 
         with tabs[0]:
             st.dataframe(df_pedidos, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Pedidos (CSV)", df_pedidos.to_csv(index=False).encode("utf-8"), "pedidos.csv", "text/csv", key="download_pedidos")
+            st.download_button("Baixar Pedidos (CSV)", df_pedidos.to_csv(index=False).encode("utf-8"), "pedidos.csv", "text/csv", key="download_pedidos", use_container_width=True)
 
         with tabs[1]:
             st.dataframe(df_itens, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Itens (CSV)", df_itens.to_csv(index=False).encode("utf-8"), "itens.csv", "text/csv", key="download_itens")
+            st.download_button("Baixar Itens (CSV)", df_itens.to_csv(index=False).encode("utf-8"), "itens.csv", "text/csv", key="download_itens", use_container_width=True)
 
         with tabs[2]:
             st.dataframe(df_totais, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Totais (CSV)", df_totais.to_csv(index=False).encode("utf-8"), "totais.csv", "text/csv", key="download_totais")
+            st.download_button("Baixar Totais (CSV)", df_totais.to_csv(index=False).encode("utf-8"), "totais.csv", "text/csv", key="download_totais", use_container_width=True)
 
         if debug:
             with st.sidebar.expander("📝 Logs de Parsing", expanded=True):
-                st.code("\n".join(logs), language='log')
+                # --- LÓGICA PARA EVITAR CRASH COM LOGS MUITO GRANDES ---
+                MAX_LOG_LINES = 1000 # Define um limite máximo de linhas de log
+                
+                if len(logs) > MAX_LOG_LINES:
+                    # Se o log for maior que o limite, mostra o início e o fim
+                    log_display = logs[:500] + [f"\n... (log truncado, {len(logs) - 1000} linhas omitidas) ...\n"] + logs[-500:]
+                    st.code("\n".join(log_display), language='log')
+                    # Oferece o download do log completo
+                    st.download_button(
+                        label=" baixar log completo",
+                        data="\n".join(logs).encode('utf-8'),
+                        file_name="parsing_log.txt",
+                        mime="text/plain"
+                    )
+                else:
+                    # Se o log for pequeno, mostra tudo
+                    st.code("\n".join(logs), language='log')
+
 
         prog.progress(100, text="Finalizado.")
 
