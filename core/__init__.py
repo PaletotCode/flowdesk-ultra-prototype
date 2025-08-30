@@ -1,1 +1,0 @@
-# Core module - lógica de negócio da aplicação

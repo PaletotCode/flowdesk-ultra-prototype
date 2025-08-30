@@ -1,109 +1,183 @@
-# Pedidos Parser API
+# Parser de Pedidos - API Backend
 
-API robusta e escalável para processamento de planilhas de pedidos (.ods, .xls, .xlsx), construída com FastAPI, PostgreSQL e Google Cloud Storage.
+Esta API FastAPI processa planilhas de pedidos (.ods, .xls, .xlsx) e extrai dados estruturados para armazenamento em PostgreSQL.
 
-## 🚀 Características
+## 🚀 Funcionalidades
 
-- **Parser Otimizado**: Lógica de parsing extremamente precisa preservada do sistema original
-- **Processamento Assíncrono**: Arquivos são processados em background usando FastAPI BackgroundTasks
-- **Armazenamento Robusto**: PostgreSQL para dados estruturados + Google Cloud Storage para arquivos
-- **API RESTful**: Endpoints bem documentados com validação automática (Pydantic)
-- **Containerizado**: Pronto para deploy com Docker
-- **Escalável**: Arquitetura preparada para alta demanda
+- **Processamento de Planilhas**: Suporte para formatos .ods, .xls e .xlsx
+- **Extração Inteligente**: Parser robusto que identifica pedidos e itens automaticamente
+- **Persistência**: Dados salvos em PostgreSQL com SQLAlchemy ORM
+- **API RESTful**: Endpoints bem documentados com FastAPI
+- **Cloud Ready**: Configurado para deploy no Railway
 
 ## 📁 Estrutura do Projeto
 
 ```
 /
-├── main.py                 # Arquivo principal da API FastAPI
-├── requirements.txt        # Dependências do projeto
-├── Dockerfile             # Container da aplicação
-├── .env.example           # Exemplo de variáveis de ambiente
-├── README.md              # Documentação
-│
-├── core/                  # Lógica de negócio
-│   ├── __init__.py
-│   ├── parser.py          # Parser original (PRESERVADO)
-│   └── gcs_utils.py       # Utilitários Google Cloud Storage
-│
-├── db/                    # Banco de dados
-│   ├── __init__.py
-│   ├── models.py          # Modelos SQLAlchemy
-│   └── database.py        # Configuração do banco
-│
-└── api/                   # API REST
-    ├── __init__.py
-    ├── routes.py          # Endpoints da API
-    └── schemas.py         # Modelos Pydantic
+├── main.py              # Entrypoint da API
+├── requirements.txt     # Dependências Python
+├── railway.toml         # Configuração Railway
+├── core/
+│   └── parser.py        # Lógica de parsing (preservada do original)
+├── db/
+│   ├── database.py      # Configuração do banco
+│   └── models.py        # Modelos SQLAlchemy
+└── api/
+    ├── routes.py        # Endpoints da API  
+    └── schemas.py       # Schemas Pydantic
 ```
 
-## 🛠️ Configuração
+## 🛠️ Instalação e Execução
 
-### 1. Variáveis de Ambiente
+### Pré-requisitos
+- Python 3.8+
+- PostgreSQL
 
-Copie o arquivo `.env.example` para `.env` e configure:
-
+### 1. Instalar Dependências
 ```bash
-# Banco de dados (Railway PostgreSQL)
-DATABASE_URL=postgresql://usuario:senha@host:porta/banco
-
-# Google Cloud Storage
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
-
-# Servidor
-HOST=0.0.0.0
-PORT=8000
-DEBUG=false
-```
-
-### 2. Instalação Local
-
-```bash
-# Clone o repositório
-git clone <seu-repo>
-cd pedidos-parser-api
-
-# Instale as dependências
 pip install -r requirements.txt
+```
 
-# Execute a aplicação
+### 2. Configurar Banco de Dados
+Defina a variável de ambiente `DATABASE_URL`:
+```bash
+export DATABASE_URL="postgresql://username:password@localhost/parser_db"
+```
+
+### 3. Executar a API
+```bash
 python main.py
 ```
 
-### 3. Docker
+A API estará disponível em: `http://localhost:8000`
 
+## 📚 Documentação da API
+
+### Endpoints Principais
+
+#### `POST /api/v1/processar-planilha/`
+Processa uma planilha e salva os dados no banco.
+
+**Parâmetros:**
+- `arquivo`: Arquivo da planilha (form-data)
+- `debug`: Boolean opcional para logs detalhados
+
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "pedidos_processados": 1250,
+  "itens_processados": 8500,
+  "logs": ["..."] // apenas se debug=true
+}
+```
+
+#### `GET /api/v1/status/`
+Verifica se a API está funcionando.
+
+#### `GET /api/v1/pedidos/count/`
+Retorna o número total de pedidos no banco.
+
+#### `GET /api/v1/itens/count/`
+Retorna o número total de itens no banco.
+
+### Documentação Interativa
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
+
+## 🗄️ Estrutura do Banco de Dados
+
+### Tabela `pedidos`
+Armazena informações dos pedidos:
+- `pedido_id` (string, único)
+- `tipo_pedido`, `vendedor`, `cliente`
+- Valores financeiros: `vlr_produtos`, `vlr_liquido`, `desconto`, etc.
+- Metadados: `dt_extracao`, timestamps, etc.
+
+### Tabela `itens_pedido`
+Armazena itens de cada pedido:
+- `pedido_id` (FK para pedidos)
+- `codigo`, `nome`, `marca`
+- `quantidade`, `preco_venda`, `subtotal_item`
+- Custos e margens de lucro
+
+## 🚀 Deploy no Railway
+
+### 1. Conectar ao GitHub
+Conecte seu repositório ao Railway.
+
+### 2. Adicionar PostgreSQL
+No dashboard do Railway, adicione um serviço PostgreSQL.
+
+### 3. Deploy Automático
+O Railway detectará o `railway.toml` e fará o deploy automaticamente.
+
+### 4. Configurar Domínio
+Configure um domínio personalizado no dashboard do Railway.
+
+## 🔧 Variáveis de Ambiente
+
+| Variável | Descrição | Exemplo |
+|----------|-----------|---------|
+| `DATABASE_URL` | URL de conexão PostgreSQL | `postgresql://user:pass@host:5432/db` |
+| `PORT` | Porta da aplicação | `8000` (Railway define automaticamente) |
+
+## 🧪 Testando a API
+
+### Usando curl
 ```bash
-# Build da imagem
-docker build -t pedidos-parser-api .
-
-# Execute o container
-docker run -p 8000:8000 --env-file .env pedidos-parser-api
+curl -X POST "http://localhost:8000/api/v1/processar-planilha/" \
+  -H "Content-Type: multipart/form-data" \
+  -F "arquivo=@sua_planilha.xlsx" \
+  -F "debug=true"
 ```
 
-## 📚 Endpoints da API
+### Usando Python
+```python
+import requests
 
-### Processamento de Arquivos
+url = "http://localhost:8000/api/v1/processar-planilha/"
+files = {"arquivo": open("sua_planilha.xlsx", "rb")}
+data = {"debug": True}
 
-**POST /v1/uploads/process**
-```json
-{
-  "file_url": "gs://meu-bucket/planilha.ods"
-}
-```
-Resposta:
-```json
-{
-  "status": "processing_started",
-  "upload_id": "uuid-do-upload"
-}
+response = requests.post(url, files=files, data=data)
+print(response.json())
 ```
 
-**GET /v1/uploads/{upload_id}/status**
-```json
-{
-  "status": "completed",
-  "item_count": 1234,
-  "pedido_count": 56,
-  "created_at": "2024-01-01T10:00:00Z",
-  "completed_at": "2024-01-01T10:01:30Z",
-  "filename": "
+## ⚡ Performance e Escalabilidade
+
+- **Processamento Assíncrono**: Endpoints FastAPI assíncronos
+- **Connection Pooling**: SQLAlchemy com pool de conexões
+- **Indexação**: Índices em `pedido_id` para consultas rápidas
+- **Deduplicação**: Lógica para evitar registros duplicados
+
+## 🔒 Considerações de Segurança
+
+Para produção, considere:
+- Autenticação e autorização
+- Rate limiting
+- Validação rigorosa de arquivos
+- HTTPS obrigatório
+- Configuração específica de CORS
+
+## 🐛 Troubleshooting
+
+### Erro de Conexão com Banco
+Verifique se `DATABASE_URL` está correta e o PostgreSQL está rodando.
+
+### Erro no Parsing
+A lógica de parsing foi preservada do código original testado. Se houver erros, verifique o formato da planilha.
+
+### Deploy no Railway
+Certifique-se de que:
+- O serviço PostgreSQL está ativo
+- As variáveis de ambiente estão configuradas
+- O `railway.toml` está no root do projeto
+
+## 📈 Próximos Passos
+
+1. **Frontend**: Construir interface em Next.js
+2. **Cache**: Implementar Redis para performance
+3. **Filas**: Processamento assíncrono com Celery
+4. **Monitoramento**: Logs estruturados e métricas
+5. **Testes**: Suite de testes automatizados

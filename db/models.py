@@ -1,47 +1,12 @@
-"""
-Modelos SQLAlchemy para o banco de dados PostgreSQL.
-Define as tabelas baseadas na estrutura extraída pelo parser.
-"""
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from datetime import datetime
+from db.database import Base
 
-Base = declarative_base()
-
-
-class Upload(Base):
-    """
-    Tabela para controlar o status dos uploads e processamentos.
-    """
-    __tablename__ = "uploads"
-    
-    id = Column(String, primary_key=True)  # UUID gerado
-    file_url = Column(String, nullable=False)  # URL do arquivo no GCS
-    filename = Column(String, nullable=False)  # Nome original do arquivo
-    status = Column(String, nullable=False, default="processing")  # processing, completed, failed
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    error_message = Column(Text, nullable=True)
-    total_pedidos = Column(Integer, default=0)
-    total_itens = Column(Integer, default=0)
-    
-    # Relacionamento com pedidos
-    pedidos = relationship("Pedido", back_populates="upload", cascade="all, delete-orphan")
-
-
-class Pedido(Base):
-    """
-    Tabela de pedidos - baseada na estrutura extraída pelo parser.
-    """
+class Pedidos(Base):
     __tablename__ = "pedidos"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    upload_id = Column(String, ForeignKey("uploads.id"), nullable=False)
-    
-    # Campos do pedido (conforme extraído pelo parser)
-    pedido_id = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    pedido_id = Column(String, unique=True, index=True, nullable=False)
     tipo_pedido = Column(String)
     vendedor = Column(String)
     cliente = Column(String)
@@ -50,8 +15,6 @@ class Pedido(Base):
     telefone_cliente = Column(String)
     data_hora_fechamento = Column(String)
     data_hora_recebimento = Column(String)
-    
-    # Valores monetários
     vlr_produtos = Column(Float, default=0.0)
     vlr_servicos = Column(Float, default=0.0)
     frete = Column(Float, default=0.0)
@@ -70,42 +33,29 @@ class Pedido(Base):
     percent_lucro_pres = Column(Float, default=0.0)
     vlr_lucro_pres = Column(Float, default=0.0)
     custo_compra = Column(Float, default=0.0)
+    vendedor_externo = Column(String)
+    dt_cad_cliente = Column(String)
+    origem = Column(String)
     prazo_medio = Column(Float, default=0.0)
     desconto_geral = Column(Float, default=0.0)
     percent_desconto_geral = Column(Float, default=0.0)
     valor_impulso = Column(Float, default=0.0)
     valor_brinde = Column(Float, default=0.0)
-    vlr_comis_emp_vda_direta = Column(Float, default=0.0)
-    
-    # Campos adicionais
-    vendedor_externo = Column(String)
-    dt_cad_cliente = Column(String)
-    origem = Column(String)
     ent_agrupada = Column(String)
     usuario_insercao = Column(String)
+    vlr_comis_emp_vda_direta = Column(Float, default=0.0)
     tab_preco = Column(String)
     pedido_da_devolucao = Column(String)
     dt_extracao = Column(String)
     
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relacionamentos
-    upload = relationship("Upload", back_populates="pedidos")
-    itens = relationship("ItemPedido", back_populates="pedido", cascade="all, delete-orphan")
+    # Relacionamento com itens
+    itens = relationship("ItensPedido", back_populates="pedido")
 
-
-class ItemPedido(Base):
-    """
-    Tabela de itens dos pedidos.
-    """
+class ItensPedido(Base):
     __tablename__ = "itens_pedido"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    pedido_id = Column(String, nullable=False)  # ID do pedido (não FK para a tabela pedidos)
-    pedido_db_id = Column(Integer, ForeignKey("pedidos.id"), nullable=False)  # FK para o registro na tabela pedidos
-    
-    # Dados do item
+    id = Column(Integer, primary_key=True, index=True)
+    pedido_id = Column(String, ForeignKey("pedidos.pedido_id"), nullable=False)
     codigo = Column(String, nullable=False)
     nome = Column(String)
     marca = Column(String)
@@ -120,25 +70,5 @@ class ItemPedido(Base):
     linha_origem = Column(Integer)
     subtotal_item = Column(Float, default=0.0)
     
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relacionamento
-    pedido = relationship("Pedido", back_populates="itens")
-
-
-class TotalPedido(Base):
-    """
-    Tabela com totais agregados por pedido.
-    """
-    __tablename__ = "totais_pedido"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    pedido_id = Column(String, nullable=False)
-    qtd_itens = Column(Integer, default=0)
-    valor_bruto = Column(Float, default=0.0)
-    valor_descontos = Column(Float, default=0.0)
-    valor_liquido = Column(Float, default=0.0)
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relacionamento com pedido
+    pedido = relationship("Pedidos", back_populates="itens")
