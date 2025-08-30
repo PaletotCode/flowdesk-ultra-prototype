@@ -45,7 +45,7 @@ if uploaded:
 
     except Exception as e:
         st.error(f"Ocorreu um erro durante o processamento: {e}")
-        st.exception(e) # Mostra o traceback completo para depuração
+        st.exception(e) 
         prog.progress(100, text="Erro!")
 else:
     st.info("Aguardando o upload de um arquivo para iniciar.")

@@ -44,7 +44,6 @@ def load_sheet(file) -> pd.DataFrame:
     elif suffix == "xls":
         engine = "xlrd"
     
-    # Usar sheet_name=0 para garantir que apenas a primeira planilha seja lida como DataFrame.
     df = pd.read_excel(file, sheet_name=0, header=None, dtype=str, engine=engine)
     return df
 
@@ -61,7 +60,6 @@ def normalize_columns(df: pd.DataFrame, header_idx: int) -> pd.DataFrame:
     """Aplica os nomes de colunas normalizados e retorna o DataFrame a partir dos dados."""
     headers = df.iloc[header_idx].tolist()
     
-    # Renomeia colunas duplicadas para evitar conflitos
     cols_seen = {}
     normalized_cols = []
     for h in headers:
@@ -173,7 +171,8 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
 
     df_pedidos = pd.DataFrame(pedidos_rows)
     if not df_pedidos.empty:
-        df_pedidos["dt_extracao"] = pd.Timestamp.utcnow().tz_localize("UTC").isoformat()
+        # CORREÇÃO APLICADA AQUI: .tz_localize("UTC") removido.
+        df_pedidos["dt_extracao"] = pd.Timestamp.utcnow().isoformat()
 
     df_itens = pd.DataFrame(list(itens_rows.values()))
     
