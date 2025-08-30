@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from parser import load_sheet, parse
+# CORREÇÃO: Importa do novo arquivo 'sheet_parser.py'
+from sheet_parser import load_sheet, parse
 
 st.set_page_config(page_title="Parser de Pedidos", layout="wide")
 
