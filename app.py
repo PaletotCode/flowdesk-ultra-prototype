@@ -5,7 +5,7 @@ import unicodedata
 from typing import Tuple, Dict, List, Optional
 
 # ==============================================================================
-# PARSING LOGIC (from sheet_parser.py)
+# LÓGICA DE PARSING (INTEGRADA DIRETAMENTE NO APP)
 # ==============================================================================
 
 def _strip_accents(s: str) -> str:
@@ -33,7 +33,6 @@ def _to_float(x) -> Optional[float]:
         return None
 
 def load_sheet(file) -> pd.DataFrame:
-    """Carrega a primeira planilha de um arquivo ODS, XLS ou XLSX como um DataFrame."""
     name = getattr(file, "name", "") if not isinstance(file, str) else file
     suffix = name.lower().split(".")[-1]
     engine = None
@@ -203,9 +202,8 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
 
     return df_pedidos, df_itens, df_totais, logs
 
-
 # ==============================================================================
-# STREAMLIT UI
+# INTERFACE DO STREAMLIT
 # ==============================================================================
 
 st.set_page_config(page_title="Parser de Pedidos", layout="wide")
@@ -233,15 +231,15 @@ if uploaded:
 
         with tabs[0]:
             st.dataframe(df_pedidos, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Pedidos (CSV)", df_pedidos.to_csv(index=False).encode("utf-8"), "pedidos.csv", "text/csv", use_container_width=True)
+            st.download_button("Baixar Pedidos (CSV)", df_pedidos.to_csv(index=False).encode("utf-8"), "pedidos.csv", "text/csv", key="download_pedidos")
 
         with tabs[1]:
             st.dataframe(df_itens, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Itens (CSV)", df_itens.to_csv(index=False).encode("utf-8"), "itens.csv", "text/csv", use_container_width=True)
+            st.download_button("Baixar Itens (CSV)", df_itens.to_csv(index=False).encode("utf-8"), "itens.csv", "text/csv", key="download_itens")
 
         with tabs[2]:
             st.dataframe(df_totais, use_container_width=True, hide_index=True)
-            st.download_button("Baixar Totais (CSV)", df_totais.to_csv(index=False).encode("utf-8"), "totais.csv", "text/csv", use_container_width=True)
+            st.download_button("Baixar Totais (CSV)", df_totais.to_csv(index=False).encode("utf-8"), "totais.csv", "text/csv", key="download_totais")
 
         if debug:
             with st.sidebar.expander("📝 Logs de Parsing", expanded=True):
@@ -255,5 +253,3 @@ if uploaded:
         prog.progress(100, text="Erro!")
 else:
     st.info("Aguardando o upload de um arquivo para iniciar.")
-
-    #update
