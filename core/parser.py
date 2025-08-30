@@ -1,13 +1,14 @@
-import streamlit as st
+"""
+Módulo de parsing de planilhas de pedidos.
+Esta é a lógica core migrada do app.py original - NÃO ALTERAR A LÓGICA INTERNA.
+"""
 import pandas as pd
 import numpy as np
 import unicodedata
-import ezodf # Biblioteca para leitura robusta de ODS
+import ezodf  # Biblioteca para leitura robusta de ODS
 from typing import Tuple, Dict, List, Optional
+import io
 
-# ==============================================================================
-# LÓGICA DE PARSING (Funcionalidade 100% mantida)
-# ==============================================================================
 
 def _strip_accents(s: str) -> str:
     if s is None or (isinstance(s, float) and np.isnan(s)):
@@ -15,12 +16,15 @@ def _strip_accents(s: str) -> str:
     s = str(s).strip()
     return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
 
+
 def _norm_col(col: str) -> str:
     raw_norm = _strip_accents(col).lower().strip()
     return raw_norm.replace("  ", " ").replace("\n", " ").replace("\t", " ").replace(".", "").replace("/", "").replace(" ", "_")
 
+
 def _is_blank_row(row: pd.Series) -> bool:
     return all((str(x).strip() == "" or pd.isna(x)) for x in row)
+
 
 def _to_float(x) -> float:
     if x is None or (isinstance(x, float) and np.isnan(x)):
@@ -42,20 +46,24 @@ def _to_float(x) -> float:
     except (ValueError, TypeError):
         return 0.0
 
+
 def _to_percent_float(x) -> float:
     if x is None:
         return 0.0
     s = str(x).strip().replace('%', '')
     return _to_float(s) / 100.0 if s else 0.0
     
+
 def _get_str_val(data: dict, key: str) -> str:
     return str(data.get(key, "") or "").strip()
 
-# --- FUNÇÃO REFATORADA PARA LEITURA ROBUSTA ---
-def _read_ods_robustly(file) -> pd.DataFrame:
-    """Lê um arquivo ODS célula por célula usando ezodf para máxima robustez."""
-    file.seek(0)
-    doc = ezodf.opendoc(file)
+
+def _read_ods_robustly(file_content: bytes) -> pd.DataFrame:
+    """
+    Lê arquivo ODS de forma robusta a partir do conteúdo em bytes.
+    """
+    file_obj = io.BytesIO(file_content)
+    doc = ezodf.opendoc(file_obj)
     if not doc.sheets:
         return pd.DataFrame()
 
@@ -65,35 +73,52 @@ def _read_ods_robustly(file) -> pd.DataFrame:
         row_data = []
         for cell in row:
             try:
-                # Tenta obter o valor da célula da forma mais segura possível
                 value = cell.value
-                # Converte explicitamente para string para evitar erros de tipo no pandas
-                row_data.append(str(value) if value is not None else "")
+                
+                # --- CORREÇÃO PARA O '.0' NOS IDs ---
+                # Se o valor for um float que é um número inteiro (ex: 123.0),
+                # converte para int antes de transformar em string.
+                if isinstance(value, float) and value.is_integer():
+                    row_data.append(str(int(value)))
+                else:
+                    row_data.append(str(value) if value is not None else "")
+
             except Exception:
-                # Se qualquer erro ocorrer ao ler a célula, trata como texto vazio
                 row_data.append("")
         data.append(row_data)
         
     return pd.DataFrame(data)
 
-def load_sheet(file) -> pd.DataFrame:
-    """
-    Refatorado: Detecta o formato do arquivo. Se for ODS, usa um leitor
-    customizado e robusto. Mantém o comportamento original para outros formatos.
-    """
-    file.seek(0)
-    file_name = getattr(file, "name", "").lower()
 
-    if file_name.endswith(".ods"):
-        # Usa o novo leitor robusto para arquivos ODS
-        return _read_ods_robustly(file)
+def load_sheet(file_content: bytes, filename: str) -> pd.DataFrame:
+    """
+    Carrega planilha a partir do conteúdo em bytes.
+    Args:
+        file_content: Conteúdo do arquivo em bytes
+        filename: Nome do arquivo para determinar o tipo
+    """
+    filename_lower = filename.lower()
+
+    if filename_lower.endswith(".ods"):
+        return _read_ods_robustly(file_content)
     else:
-        # Para outros formatos (XLS, XLSX), usa a leitura direta e já funcional do Pandas
-        engine = 'openpyxl' if file_name.endswith('.xlsx') else 'xlrd'
-        df = pd.read_excel(file, sheet_name=0, header=None, dtype=str, engine=engine)
+        file_obj = io.BytesIO(file_content)
+        engine = 'openpyxl' if filename_lower.endswith('.xlsx') else 'xlrd'
+        df = pd.read_excel(file_obj, sheet_name=0, header=None, dtype=str, engine=engine)
         return df
 
+
 def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[str]]:
+    """
+    Função principal de parsing - LÓGICA PRESERVADA DO ORIGINAL.
+    
+    Args:
+        df_raw: DataFrame bruto carregado da planilha
+        debug: Se deve gerar logs detalhados
+        
+    Returns:
+        Tuple contendo (df_pedidos, df_itens, df_totais, logs)
+    """
     logs: List[str] = []
     logs.append("Iniciando o processo de parsing.")
     df = df_raw.iloc[3:].reset_index(drop=True)
@@ -236,55 +261,3 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
         df_itens.drop(columns=["_bruto"], inplace=True, errors='ignore')
 
     return df_pedidos, df_itens, df_totais, logs
-
-# ==============================================================================
-# INTERFACE DO STREAMLIT (Funcionalidade 100% mantida)
-# ==============================================================================
-
-st.set_page_config(page_title="Parser de Pedidos", layout="wide")
-st.title("📄 Parser de Pedidos para DataFrame Estruturado")
-st.markdown("Faça o upload de sua planilha de vendas (`.ods`, `.xls`, `.xlsx`) para extrair os pedidos e itens de forma organizada.")
-
-uploaded = st.file_uploader("Selecione o arquivo", type=["ods","xls","xlsx"])
-debug = st.sidebar.checkbox("Exibir logs de debug", value=False)
-
-if uploaded:
-    prog = st.progress(0, text="Aguardando processamento…")
-    try:
-        prog.progress(10, text=f"Lendo o arquivo '{uploaded.name}'…")
-        df_raw = load_sheet(uploaded)
-
-        prog.progress(30, text="Analisando e extraindo dados…")
-        df_pedidos, df_itens, df_totais, logs = parse(df_raw, debug=debug)
-
-        prog.progress(90, text="Renderizando resultados…")
-        st.success(f"🎉 Processamento concluído! Foram encontrados **{len(df_pedidos)}** pedidos e **{len(df_itens)}** itens únicos.")
-
-        tabs = st.tabs(["🛒 Pedidos", "📦 Itens", "📊 Totais por Pedido"])
-
-        with tabs[0]:
-            st.dataframe(df_pedidos, hide_index=True, use_container_width=True)
-            st.download_button("Baixar Pedidos (CSV)", df_pedidos.to_csv(index=False).encode("utf-8"), "pedidos.csv", "text/csv", key="download_pedidos", use_container_width=True)
-        with tabs[1]:
-            st.dataframe(df_itens, hide_index=True, use_container_width=True)
-            st.download_button("Baixar Itens (CSV)", df_itens.to_csv(index=False).encode("utf-8"), "itens.csv", "text/csv", key="download_itens", use_container_width=True)
-        with tabs[2]:
-            st.dataframe(df_totais, hide_index=True, use_container_width=True)
-            st.download_button("Baixar Totais (CSV)", df_totais.to_csv(index=False).encode("utf-8"), "totais.csv", "text/csv", key="download_totais", use_container_width=True)
-
-        if debug:
-            with st.sidebar.expander("📝 Logs de Parsing", expanded=True):
-                MAX_LOG_LINES = 1000
-                if len(logs) > MAX_LOG_LINES:
-                    log_display = logs[:500] + [f"\n... (log truncado, {len(logs) - 1000} linhas omitidas) ...\n"] + logs[-500:]
-                    st.code("\n".join(log_display), language='log')
-                    st.download_button(label=" baixar log completo", data="\n".join(logs).encode('utf-8'), file_name="parsing_log.txt", mime="text/plain")
-                else:
-                    st.code("\n".join(logs), language='log')
-        prog.progress(100, text="Finalizado.")
-    except Exception as e:
-        st.error(f"Ocorreu um erro durante o processamento: {e}")
-        st.exception(e) 
-        prog.progress(100, text="Erro!")
-else:
-    st.info("Aguardando o upload de um arquivo para iniciar.")

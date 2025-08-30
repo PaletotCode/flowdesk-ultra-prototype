@@ -1,2 +1,1 @@
-# core/__init__.py
-# Arquivo vazio para tornar 'core' um pacote Python
+# Core module - lógica de negócio da aplicação
