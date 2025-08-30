@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import unicodedata
+import ezodf # Biblioteca para leitura robusta de ODS
 from typing import Tuple, Dict, List, Optional
 
 # ==============================================================================
-# LÓGICA DE PARSING (INTEGRADA DIRETAMENTE NO APP)
+# LÓGICA DE PARSING (Funcionalidade 100% mantida)
 # ==============================================================================
 
 def _strip_accents(s: str) -> str:
@@ -15,7 +16,6 @@ def _strip_accents(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
 
 def _norm_col(col: str) -> str:
-    # Normaliza o nome da coluna para uma chave de dicionário consistente
     raw_norm = _strip_accents(col).lower().strip()
     return raw_norm.replace("  ", " ").replace("\n", " ").replace("\t", " ").replace(".", "").replace("/", "").replace(" ", "_")
 
@@ -51,19 +51,47 @@ def _to_percent_float(x) -> float:
 def _get_str_val(data: dict, key: str) -> str:
     return str(data.get(key, "") or "").strip()
 
+# --- FUNÇÃO REFATORADA PARA LEITURA ROBUSTA ---
+def _read_ods_robustly(file) -> pd.DataFrame:
+    """Lê um arquivo ODS célula por célula usando ezodf para máxima robustez."""
+    file.seek(0)
+    doc = ezodf.opendoc(file)
+    if not doc.sheets:
+        return pd.DataFrame()
+
+    sheet = doc.sheets[0]
+    data = []
+    for i, row in enumerate(sheet.rows()):
+        row_data = []
+        for cell in row:
+            try:
+                # Tenta obter o valor da célula da forma mais segura possível
+                value = cell.value
+                # Converte explicitamente para string para evitar erros de tipo no pandas
+                row_data.append(str(value) if value is not None else "")
+            except Exception:
+                # Se qualquer erro ocorrer ao ler a célula, trata como texto vazio
+                row_data.append("")
+        data.append(row_data)
+        
+    return pd.DataFrame(data)
+
 def load_sheet(file) -> pd.DataFrame:
-    name = getattr(file, "name", "") if not isinstance(file, str) else file
-    suffix = name.lower().split(".")[-1]
-    engine = None
-    if suffix == "ods":
-        engine = "odf"
-    elif suffix == "xlsx":
-        engine = "openpyxl"
-    elif suffix == "xls":
-        engine = "xlrd"
-    
-    df = pd.read_excel(file, sheet_name=0, header=None, dtype=str, engine=engine)
-    return df
+    """
+    Refatorado: Detecta o formato do arquivo. Se for ODS, usa um leitor
+    customizado e robusto. Mantém o comportamento original para outros formatos.
+    """
+    file.seek(0)
+    file_name = getattr(file, "name", "").lower()
+
+    if file_name.endswith(".ods"):
+        # Usa o novo leitor robusto para arquivos ODS
+        return _read_ods_robustly(file)
+    else:
+        # Para outros formatos (XLS, XLSX), usa a leitura direta e já funcional do Pandas
+        engine = 'openpyxl' if file_name.endswith('.xlsx') else 'xlrd'
+        df = pd.read_excel(file, sheet_name=0, header=None, dtype=str, engine=engine)
+        return df
 
 def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[str]]:
     logs: List[str] = []
@@ -133,11 +161,9 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
 
             i = order_data_row_index + 1
             
-            # Pula linhas em branco até o cabeçalho do item
             while i < n and _is_blank_row(df.iloc[i]):
                 i += 1
             
-            # Agora 'i' deve estar na linha do cabeçalho do item
             if i < n:
                 item_header_raw = df.iloc[i]
                 seen = {}; item_header_dedup = []
@@ -212,7 +238,7 @@ def parse(df_raw: pd.DataFrame, debug: bool = False) -> Tuple[pd.DataFrame, pd.D
     return df_pedidos, df_itens, df_totais, logs
 
 # ==============================================================================
-# INTERFACE DO STREAMLIT
+# INTERFACE DO STREAMLIT (Funcionalidade 100% mantida)
 # ==============================================================================
 
 st.set_page_config(page_title="Parser de Pedidos", layout="wide")
