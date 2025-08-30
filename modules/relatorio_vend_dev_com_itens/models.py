@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from db.database import Base
+from config.database import Base
 
 class Pedidos(Base):
     __tablename__ = "pedidos"

@@ -4,10 +4,10 @@ from sqlalchemy.exc import IntegrityError
 import io
 import pandas as pd
 
-from db.database import get_db
-from db.models import Pedidos, ItensPedido
-from api.schemas import ProcessamentoResponse
-from core.parser import load_sheet, parse
+from config.database import get_db
+from modules.relatorio_vend_dev_com_itens.models import Pedidos, ItensPedido
+from modules.relatorio_vend_dev_com_itens.schemas import ProcessamentoResponse
+from modules.relatorio_vend_dev_com_itens.parser import load_sheet, parse
 
 router = APIRouter()
 

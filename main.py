@@ -1,50 +1,40 @@
+# main.py - Versão Atualizada
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db.database import engine
-from db.models import Base
-from api.routes import router
+from config.database import engine
+from modules.relatorio_vend_dev_com_itens import models as relatorio_models
+from modules.relatorio_vend_dev_com_itens.routes import router as relatorio_router
 
-# Criar as tabelas no banco de dados
-Base.metadata.create_all(bind=engine)
+# Criar as tabelas no banco de dados a partir do módulo específico
+relatorio_models.Base.metadata.create_all(bind=engine)
 
 # Inicializar a aplicação FastAPI
 app = FastAPI(
-    title="Parser de Pedidos API",
-    description="API para processamento de planilhas de pedidos e extração de dados estruturados",
+    title="FlowDesk Ultra API",
+    description="API para processamento e consulta de planilhas de relatórios",
     version="1.0.0"
 )
 
-# Configurar CORS para permitir requisições do frontend
+# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, especificar os domínios permitidos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Incluir as rotas
-app.include_router(router, prefix="/api/v1", tags=["parser"])
+# Incluir as rotas do módulo de relatório com um prefixo
+app.include_router(
+    relatorio_router, 
+    prefix="/api/v1/relatorio-vend-dev-com-itens", 
+    tags=["Relatório Vendas/Devoluções com Itens"]
+)
 
 @app.get("/")
 async def root():
-    """
-    Endpoint raiz da API
-    """
-    return {
-        "message": "Parser de Pedidos API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "status": "online"
-    }
+    return {"message": "FlowDesk Ultra API está online"}
 
 @app.get("/health")
 async def health_check():
-    """
-    Endpoint de verificação de saúde da aplicação
-    """
-    return {"status": "healthy", "message": "API está funcionando corretamente"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    return {"status": "healthy"}
